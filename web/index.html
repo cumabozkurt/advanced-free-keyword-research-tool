@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Advanced Free Keyword Research Tool</title>
+  <meta name="description" content="Advanced Free Keyword Research Tool — free bulk long-tail keyword ideas from Google, Bing, YouTube, Yahoo, DuckDuckGo, Yandex, Baidu, Amazon, eBay and more. Export TXT, CSV, TSV, JSON. No API keys.">
+  <meta name="theme-color" content="#0b0f17">
+  <meta property="og:title" content="Advanced Free Keyword Research Tool">
+  <meta property="og:description" content="Bulk keyword suggestions from 25 search engines. Free & open source.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip" href="#results">Skip to results</a>
+  <header class="topbar">
+    <div class="brand">
+      <img src="favicon.svg" alt="" width="34" height="34">
+      <div>
+        <h1>Advanced Free Keyword Research Tool</h1>
+        <p class="tagline" data-i18n="tagline"></p>
+      </div>
+    </div>
+    <nav class="top-actions">
+      <button id="langToggle" class="btn ghost small" type="button" aria-label="Language"></button>
+      <a class="btn ghost small" href="https://github.com/cumabozkurt/advanced-free-keyword-research-tool#readme" target="_blank" rel="noopener" data-i18n="install"></a>
+      <a class="btn ghost small" href="https://github.com/cumabozkurt/advanced-free-keyword-research-tool" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span data-i18n="star"></span>
+      </a>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <!-- ============ CONTROL PANEL ============ -->
+    <form id="form" class="panel controls" autocomplete="off">
+      <section class="card">
+        <div class="card-head">
+          <label for="seeds" class="h2" data-i18n="seeds"></label>
+          <span id="seedCount" class="muted small"></span>
+        </div>
+        <textarea id="seeds" rows="6" spellcheck="false" data-i18n-placeholder="seedsPlaceholder"></textarea>
+        <div class="row between">
+          <p class="hint" data-i18n="seedsHint"></p>
+          <label class="btn ghost small file-btn">
+            <input id="seedFile" type="file" accept=".txt,.csv,.tsv,text/plain" hidden>
+            <span data-i18n="loadFile"></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" data-i18n="locale"></h2>
+        <div class="grid2">
+          <label><span data-i18n="language"></span>
+            <select id="hl"></select>
+          </label>
+          <label><span data-i18n="country"></span>
+            <select id="gl"></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 class="h2" data-i18n="engines"></h2>
+          <div class="chip-actions">
+            <button type="button" class="link" data-select="default" data-i18n="selectDefault"></button>
+            <button type="button" class="link" data-select="all" data-i18n="selectAll"></button>
+            <button type="button" class="link" data-select="none" data-i18n="selectNone"></button>
+          </div>
+        </div>
+        <p class="hint" data-i18n="enginesHint"></p>
+        <div id="engineList" class="engine-list"></div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2" data-i18n="expansion"></h2>
+        <div id="expansionList" class="check-list"></div>
+        <div id="customBox" class="grid2" hidden>
+          <label><span data-i18n="customPrefixes"></span><input id="customPrefixes" type="text" placeholder="best, top, ucuz"></label>
+          <label><span data-i18n="customSuffixes"></span><input id="customSuffixes" type="text" placeholder="2026, online, fiyat"></label>
+        </div>
+      </section>
+
+      <details class="card" id="optionsCard">
+        <summary class="h2" data-i18n="options"></summary>
+        <div class="grid2">
+          <label><span data-i18n="depth"></span>
+            <input id="depth" type="number" min="0" max="5" step="1" value="0">
+          </label>
+          <label><span data-i18n="maxQueries"></span>
+            <input id="maxQueries" type="number" min="1" max="20000" step="1" value="300">
+          </label>
+          <label><span data-i18n="delay"></span>
+            <input id="delay" type="number" min="100" max="10000" step="50" value="350">
+          </label>
+          <label><span data-i18n="concurrency"></span>
+            <input id="concurrency" type="number" min="1" max="12" step="1" value="4">
+          </label>
+        </div>
+        <p class="hint" data-i18n="depthHint"></p>
+        <label class="check"><input id="expandRecursive" type="checkbox"><span data-i18n="expandRecursive"></span></label>
+        <label class="check"><input id="mustContain" type="checkbox"><span data-i18n="mustContain"></span></label>
+        <label class="block"><span data-i18n="proxy"></span>
+          <div class="row">
+            <input id="proxyUrl" type="url" placeholder="http://localhost:8787" inputmode="url">
+            <button id="proxyTest" type="button" class="btn ghost small" data-i18n="proxyTest"></button>
+          </div>
+        </label>
+        <p class="hint" id="proxyStatus" data-i18n="proxyHint"></p>
+      </details>
+
+      <div class="actions sticky-actions">
+        <p id="estimate" class="muted small"></p>
+        <div class="row">
+          <button id="startBtn" class="btn primary" type="submit" data-i18n="start"></button>
+          <button id="pauseBtn" class="btn" type="button" disabled data-i18n="pause"></button>
+          <button id="stopBtn" class="btn danger" type="button" disabled data-i18n="stop"></button>
+        </div>
+      </div>
+    </form>
+
+    <!-- ============ RESULTS ============ -->
+    <section id="results" class="panel results" aria-live="polite">
+      <div class="card stats-card">
+        <div class="stats">
+          <div class="stat"><span class="num" id="statUnique">0</span><span data-i18n="unique"></span></div>
+          <div class="stat"><span class="num" id="statRequests">0</span><span data-i18n="requests"></span></div>
+          <div class="stat"><span class="num" id="statRemaining">0</span><span data-i18n="remaining"></span></div>
+          <div class="stat"><span class="num" id="statErrors">0</span><span data-i18n="errors"></span></div>
+        </div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressBar"></div></div>
+        <div id="engineStats" class="engine-stats"></div>
+        <div id="notice" class="notice" hidden></div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <input id="filter" type="search" data-i18n-placeholder="filter" aria-label="Filter">
+          <input id="exclude" type="text" data-i18n-placeholder="exclude" aria-label="Exclude">
+          <label class="mini"><span data-i18n="minWords"></span><input id="minWords" type="number" min="1" max="20" value="1"></label>
+          <label class="check mini"><input id="onlyQuestions" type="checkbox"><span data-i18n="onlyQuestions"></span></label>
+          <label class="mini"><span data-i18n="sort"></span>
+            <select id="sort">
+              <option value="engines" data-i18n="sort_engines"></option>
+              <option value="hits" data-i18n="sort_hits"></option>
+              <option value="az" data-i18n="sort_az"></option>
+              <option value="length" data-i18n="sort_length"></option>
+              <option value="found" data-i18n="sort_found"></option>
+            </select>
+          </label>
+        </div>
+        <div class="export-bar">
+          <span class="muted small" data-i18n="download"></span>
+          <button type="button" class="btn small" data-export="txt">TXT</button>
+          <button type="button" class="btn small" data-export="csv">CSV</button>
+          <button type="button" class="btn small" data-export="tsv">TSV</button>
+          <button type="button" class="btn small" data-export="json">JSON</button>
+          <button type="button" class="btn small" data-export="md">MD</button>
+          <button type="button" class="btn small ghost" id="copyAll" data-i18n="copyAll"></button>
+          <label class="check mini"><input id="exportFiltered" type="checkbox" checked><span data-i18n="exportScope"></span></label>
+          <button type="button" class="btn small ghost" id="clearBtn" data-i18n="clear"></button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="table">
+            <thead>
+              <tr>
+                <th scope="col" class="num-col">#</th>
+                <th scope="col" data-i18n="colKeyword"></th>
+                <th scope="col" data-i18n="colEngines"></th>
+                <th scope="col" class="num-col" data-i18n="colHits"></th>
+                <th scope="col" class="num-col hide-sm" data-i18n="colWords"></th>
+                <th scope="col" class="hide-sm" data-i18n="colSeed"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+          <p id="empty" class="empty" data-i18n="empty"></p>
+        </div>
+        <div class="row between">
+          <span id="showing" class="muted small"></span>
+          <button id="showMore" type="button" class="btn small ghost" hidden data-i18n="showMore"></button>
+        </div>
+      </div>
+
+      <footer class="foot muted small">
+        <p data-i18n="privacy"></p>
+        <p data-i18n="responsible"></p>
+        <p>MIT © Cuma Bozkurt · <a href="https://github.com/cumabozkurt/advanced-free-keyword-research-tool" target="_blank" rel="noopener">GitHub</a> · Inspired by keywordshitter2</p>
+      </footer>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
