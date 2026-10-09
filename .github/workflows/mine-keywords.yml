@@ -1,0 +1,77 @@
+# Run keyword research directly on GitHub — no computer needed.
+# Actions tab → "Mine keywords" → Run workflow → download the artifact.
+# All engines work here (the runner is a server, so CORS does not apply).
+name: Mine keywords
+
+on:
+  workflow_dispatch:
+    inputs:
+      keywords:
+        description: 'Seed keywords (comma separated)'
+        required: true
+        default: 'seo tools, keyword research'
+      engines:
+        description: 'Engines: ids, "all", "web", "shopping", "video" (comma separated)'
+        required: true
+        default: 'google,bing,yahoo,duckduckgo,yandex,youtube,amazon,ebay'
+      expand:
+        description: 'Expansion: alpha, alpha-prefix, digits, questions, modifiers, none'
+        required: true
+        default: 'alpha,questions'
+      depth:
+        description: 'Recursion depth (0-2 recommended)'
+        required: true
+        default: '0'
+      lang:
+        description: 'Language (hl), e.g. en, tr, de'
+        required: true
+        default: 'en'
+      country:
+        description: 'Country (gl), e.g. us, tr, de'
+        required: true
+        default: 'us'
+
+permissions:
+  contents: read
+
+jobs:
+  mine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Mine
+        env:
+          KEYWORDS: ${{ inputs.keywords }}
+          ENGINES: ${{ inputs.engines }}
+          EXPAND: ${{ inputs.expand }}
+          DEPTH: ${{ inputs.depth }}
+          HL: ${{ inputs.lang }}
+          GL: ${{ inputs.country }}
+        run: |
+          printf '%s' "$KEYWORDS" | tr ',' '\n' > seeds.txt
+          node bin/cli.js -f seeds.txt -e "$ENGINES" -x "$EXPAND" -d "$DEPTH" -l "$HL" -c "$GL" \
+            --max-queries 3000 --max-results 100000 \
+            -o out/keywords.txt -o out/keywords.csv -o out/keywords.tsv -o out/keywords.json
+      - name: Summary
+        run: |
+          {
+            echo "## Advanced Free Keyword Research Tool"
+            echo ""
+            echo "**$(wc -l < out/keywords.txt) unique keywords.** Download the \`keywords\` artifact below for TXT / CSV / TSV / JSON."
+            echo ""
+            echo "<details><summary>First 100 keywords</summary>"
+            echo ""
+            echo '```'
+            head -n 100 out/keywords.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keywords
+          path: out/
+          retention-days: 14
