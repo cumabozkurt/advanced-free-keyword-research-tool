@@ -1,6 +1,6 @@
-import { ENGINES, ENGINE_MAP, DEFAULT_ENGINES, CATEGORIES } from './engines.js';
+import { ENGINES, ENGINE_MAP, DEFAULT_ENGINES, CATEGORIES, DEFAULT_LOCALE, isEngineId, isValidLang, isValidCountry, localeSupport, localeTarget } from './engines.js';
 import { Miner } from './miner.js';
-import { expandSeed, parseSeeds, parseList } from './expand.js';
+import { expandSeed, parseSeeds, parseList, ALPHABETS, alphabetKey } from './expand.js';
 import { serialize, fileName, MIME } from './export.js';
 import { isQuestion, wordCount, normalizeKeyword } from './normalize.js';
 import { createBrowserFetcher, browserMode } from './transport-browser.js';
@@ -12,15 +12,25 @@ const COPY_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="
 
 const LANGS = [
   ['tr', 'Türkçe'], ['en', 'English'], ['de', 'Deutsch'], ['fr', 'Français'], ['es', 'Español'], ['it', 'Italiano'],
-  ['pt', 'Português'], ['nl', 'Nederlands'], ['ru', 'Русский'], ['ar', 'العربية'], ['ja', '日本語'], ['ko', '한국어'],
-  ['zh', '中文'], ['hi', 'हिन्दी'], ['id', 'Bahasa Indonesia'], ['pl', 'Polski'], ['uk', 'Українська'], ['az', 'Azərbaycan'],
+  ['pt', 'Português'], ['pt-br', 'Português (Brasil)'], ['nl', 'Nederlands'], ['pl', 'Polski'], ['ru', 'Русский'], ['uk', 'Українська'],
+  ['az', 'Azərbaycan'], ['ar', 'العربية'], ['fa', 'فارسی'], ['he', 'עברית'], ['hi', 'हिन्दी'], ['ur', 'اردو'], ['bn', 'বাংলা'],
+  ['id', 'Bahasa Indonesia'], ['ms', 'Bahasa Melayu'], ['vi', 'Tiếng Việt'], ['th', 'ไทย'], ['ja', '日本語'], ['ko', '한국어'],
+  ['zh-cn', '中文 (简体)'], ['zh-tw', '中文 (繁體)'], ['el', 'Ελληνικά'], ['ro', 'Română'], ['bg', 'Български'], ['hu', 'Magyar'],
+  ['cs', 'Čeština'], ['sv', 'Svenska'], ['da', 'Dansk'], ['no', 'Norsk'], ['fi', 'Suomi'], ['ka', 'ქართული'], ['kk', 'Қазақ'],
 ];
 const COUNTRIES = [
   ['tr', 'Türkiye'], ['us', 'United States'], ['gb', 'United Kingdom'], ['de', 'Deutschland'], ['fr', 'France'], ['es', 'España'],
-  ['it', 'Italia'], ['nl', 'Nederland'], ['ca', 'Canada'], ['au', 'Australia'], ['in', 'India'], ['br', 'Brasil'], ['mx', 'México'],
-  ['jp', '日本'], ['kr', '대한민국'], ['cn', '中国'], ['ru', 'Россия'], ['sa', 'Saudi Arabia'], ['ae', 'UAE'], ['az', 'Azərbaycan'],
-  ['pl', 'Polska'], ['id', 'Indonesia'],
+  ['it', 'Italia'], ['nl', 'Nederland'], ['be', 'België'], ['at', 'Österreich'], ['ch', 'Schweiz'], ['pl', 'Polska'], ['se', 'Sverige'],
+  ['no', 'Norge'], ['dk', 'Danmark'], ['fi', 'Suomi'], ['ie', 'Ireland'], ['pt', 'Portugal'], ['gr', 'Ελλάδα'], ['ro', 'România'],
+  ['bg', 'България'], ['hu', 'Magyarország'], ['cz', 'Česko'], ['ua', 'Україна'], ['ru', 'Россия'], ['az', 'Azərbaycan'],
+  ['ge', 'საქართველო'], ['kz', 'Қазақстан'], ['uz', "O'zbekiston"], ['cy', 'Kıbrıs'], ['ca', 'Canada'], ['mx', 'México'],
+  ['br', 'Brasil'], ['ar', 'Argentina'], ['co', 'Colombia'], ['cl', 'Chile'], ['au', 'Australia'], ['nz', 'New Zealand'],
+  ['in', 'India'], ['pk', 'Pakistan'], ['bd', 'Bangladesh'], ['id', 'Indonesia'], ['my', 'Malaysia'], ['sg', 'Singapore'],
+  ['ph', 'Philippines'], ['vn', 'Việt Nam'], ['th', 'ไทย'], ['jp', '日本'], ['kr', '대한민국'], ['cn', '中国'], ['tw', '台灣'],
+  ['hk', '香港'], ['sa', 'السعودية'], ['ae', 'الإمارات'], ['eg', 'مصر'], ['ma', 'المغرب'], ['il', 'ישראל'], ['ir', 'ایران'],
+  ['za', 'South Africa'], ['ng', 'Nigeria'],
 ];
+const LOCALE_PRESETS = [['TR', 'tr', 'tr'], ['US', 'en', 'us'], ['UK', 'en', 'gb'], ['DE', 'de', 'de'], ['FR', 'fr', 'fr'], ['AZ', 'az', 'az'], ['SA', 'ar', 'sa']];
 const EXPANSIONS = ['seed', 'alphaSuffix', 'alphaPrefix', 'digitSuffix', 'questions', 'modifiers', 'custom'];
 
 const state = {
@@ -37,7 +47,7 @@ const state = {
 // ---------------- settings ----------------
 const defaults = () => ({
   ui: (navigator.language || 'tr').toLowerCase().startsWith('tr') ? 'tr' : 'en',
-  seeds: '', hl: 'tr', gl: 'tr', engines: DEFAULT_ENGINES,
+  seeds: '', hl: DEFAULT_LOCALE.hl, gl: DEFAULT_LOCALE.gl, engines: DEFAULT_ENGINES,
   expansion: { seed: true, alphaSuffix: true }, customPrefixes: '', customSuffixes: '',
   depth: 0, maxQueries: 300, delay: 350, concurrency: 4, expandRecursive: false, mustContain: false, proxyUrl: '',
 });
@@ -58,16 +68,51 @@ function applyI18n() {
   $('langToggle').title = t('langTitle');
   renderEngines(readEnginesSelection());
   renderExpansions(readExpansionSelection());
+  renderLocalePresets();
   updateSeedCount();
+  updateLocaleInfo();
   updateControls();
   scheduleRender();
 }
 
 // ---------------- builders ----------------
 function fillSelect(sel, items, value) {
-  sel.replaceChildren(...items.map(([v, label]) => { const o = new Option(`${label} (${v})`, v); return o; }));
+  sel.replaceChildren(...items.map(([v, label]) => new Option(`${label} (${v})`, v)));
+  setSelect(sel, value);
+}
+/** Select a value, adding it as an option if it's a valid code not in the list (e.g. from a shared URL). */
+function setSelect(sel, value) {
+  if (!value) return;
+  if (![...sel.options].some((o) => o.value === value)) sel.append(new Option(value, value));
   sel.value = value;
 }
+
+function renderLocalePresets() {
+  const box = $('localePresets');
+  box.replaceChildren(...LOCALE_PRESETS.map(([label, hl, gl]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'link'; b.textContent = label; b.title = `hl=${hl} · gl=${gl}`;
+    b.addEventListener('click', () => { setSelect($('hl'), hl); setSelect($('gl'), gl); onLocaleChange(); });
+    return b;
+  }));
+}
+
+function updateLocaleInfo() {
+  const o = { hl: $('hl').value, gl: $('gl').value };
+  const sel = readEnginesSelection().map((id) => ENGINE_MAP[id]);
+  const uses = sel.filter((e) => localeSupport(e) !== 'fixed');
+  const fixed = sel.filter((e) => localeSupport(e) === 'fixed');
+  const targets = sel.map((e) => [e, localeTarget(e, o)]).filter(([, x]) => x).map(([e, x]) => `${e.name} → ${x}`);
+  const ak = alphabetKey(o.hl);
+  const parts = [];
+  if (uses.length) parts.push(t('localeUses', { list: uses.map((e) => `${e.name} (${t(`loc_${localeSupport(e)}`)})`).join(', ') }));
+  if (fixed.length) parts.push(t('localeFixed', { list: fixed.map((e) => `${e.name}${e.region ? ` [${e.region}]` : ''}`).join(', ') }));
+  if (targets.length) parts.push(t('localeTargets', { list: targets.join(', ') }));
+  parts.push(t('alphabetInfo', { n: ALPHABETS[ak].length, lang: ak }));
+  $('localeInfo').textContent = parts.join(' ');
+}
+
+function onLocaleChange() { updateLocaleInfo(); updateSeedCount(); saveSettings(); }
 
 function proxyUrl() { return ($('proxyUrl').value.trim() || state.proxyAuto).replace(/\/+$/, ''); }
 
@@ -98,7 +143,9 @@ function renderEngines(selected) {
       const native = e.jsonp || e.cors;
       badge.className = `badge ${native ? 'direct' : 'proxy'}`;
       badge.textContent = native ? t('direct') : t('needsProxy') + (e.experimental ? '*' : '');
-      label.append(input, name, badge);
+      label.append(input, name);
+      if (e.region) { const r = document.createElement('span'); r.className = 'badge'; r.textContent = e.region; r.title = 'single market'; label.append(r); }
+      label.append(badge);
       grid.append(label);
     }
     group.append(h, grid);
@@ -186,6 +233,7 @@ async function start(ev) {
   if (!usable.length) { notice(t('noEngines')); return; }
   saveSettings();
 
+  state.lastMeta = { seeds, engines: usable, lang: f.hl, country: f.gl, depth: f.depth };
   const miner = new Miner({
     fetcher: createBrowserFetcher({ proxyUrl: proxy }),
     engines: usable, seeds, hl: f.hl, gl: f.gl,
@@ -263,7 +311,8 @@ function filtered() {
 function scheduleRender() {
   if (state.renderPending) return;
   state.renderPending = true;
-  setTimeout(() => { state.renderPending = false; render(); }, 250);
+  const wait = state.records.length > 20000 ? 1500 : state.records.length > 5000 ? 700 : 250;
+  setTimeout(() => { state.renderPending = false; render(); }, wait);
 }
 
 function render() {
@@ -311,7 +360,8 @@ function download(format) {
   if (!recs.length) { toast(t('empty')); return; }
   const f = readForm();
   const seeds = parseSeeds(f.seeds);
-  const blob = new Blob([serialize(format, recs, { seeds, engines: f.engines, lang: f.hl, country: f.gl })], { type: MIME[format] });
+  const meta = state.lastMeta || { seeds, engines: f.engines, lang: f.hl, country: f.gl };
+  const blob = new Blob([serialize(format, recs, meta)], { type: MIME[format] });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = fileName(seeds, format);
@@ -346,22 +396,24 @@ async function testProxy(url, silent = false) {
 function init() {
   const s = loadSettings();
   state.lang = STRINGS[s.ui] ? s.ui : 'tr';
-  fillSelect($('hl'), LANGS, s.hl);
-  fillSelect($('gl'), COUNTRIES, s.gl);
+  fillSelect($('hl'), LANGS, isValidLang(s.hl) ? s.hl : DEFAULT_LOCALE.hl);
+  fillSelect($('gl'), COUNTRIES, isValidCountry(s.gl) ? s.gl : DEFAULT_LOCALE.gl);
   $('seeds').value = s.seeds;
   $('customPrefixes').value = s.customPrefixes; $('customSuffixes').value = s.customSuffixes;
   $('depth').value = s.depth; $('maxQueries').value = s.maxQueries; $('delay').value = s.delay; $('concurrency').value = s.concurrency;
   $('expandRecursive').checked = s.expandRecursive; $('mustContain').checked = s.mustContain;
   $('proxyUrl').value = s.proxyUrl;
-  renderEngines(s.engines);
-  renderExpansions(s.expansion);
+  renderEngines((s.engines || []).filter(isEngineId));
+  renderExpansions(s.expansion || {});
 
   // URL params: ?q=seo+tools&engines=google,bing&hl=en&gl=us&run=1
   const params = new URLSearchParams(location.search);
   if (params.get('q')) $('seeds').value = params.getAll('q').join('\n');
-  if (params.get('hl')) $('hl').value = params.get('hl');
-  if (params.get('gl')) $('gl').value = params.get('gl');
-  if (params.get('engines')) renderEngines(params.get('engines').split(',').filter((id) => ENGINE_MAP[id]));
+  const phl = (params.get('hl') || '').toLowerCase();
+  const pgl = (params.get('gl') || '').toLowerCase();
+  if (isValidLang(phl)) setSelect($('hl'), phl);
+  if (isValidCountry(pgl)) setSelect($('gl'), pgl);
+  if (params.get('engines')) renderEngines(params.get('engines').split(',').filter(isEngineId));
   if (params.get('lang') && STRINGS[params.get('lang')]) state.lang = params.get('lang');
 
   applyI18n();
@@ -380,7 +432,7 @@ function init() {
   $('form').addEventListener('change', (e) => {
     if (e.target.dataset?.exp === 'custom') $('customBox').hidden = !e.target.checked;
     if (e.target.id === 'proxyUrl') renderEngines(readEnginesSelection());
-    updateSeedCount(); saveSettings();
+    updateLocaleInfo(); updateSeedCount(); saveSettings();
   });
   $('seeds').addEventListener('input', () => { updateSeedCount(); clearTimeout(init.t); init.t = setTimeout(saveSettings, 400); });
   $('seedFile').addEventListener('change', async (e) => {
@@ -395,7 +447,7 @@ function init() {
     const mode = b.dataset.select;
     const proxy = proxyUrl();
     const ids = mode === 'all' ? ENGINES.filter((e) => browserMode(e, proxy) && !e.experimental).map((e) => e.id) : mode === 'default' ? DEFAULT_ENGINES : [];
-    renderEngines(ids); updateSeedCount(); saveSettings();
+    renderEngines(ids); updateLocaleInfo(); updateSeedCount(); saveSettings();
   }));
   for (const id of ['filter', 'exclude', 'minWords', 'onlyQuestions', 'sort']) $(id).addEventListener('input', () => { state.limit = 500; scheduleRender(); });
   $('showMore').addEventListener('click', () => { state.limit += 1000; render(); });

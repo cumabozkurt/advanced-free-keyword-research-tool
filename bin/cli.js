@@ -8,7 +8,7 @@
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
-import { ENGINES, ENGINE_MAP, DEFAULT_ENGINES } from '../web/js/engines.js';
+import { ENGINES, DEFAULT_ENGINES, DEFAULT_LOCALE, isEngineId, isValidLang, isValidCountry, localeSupport } from '../web/js/engines.js';
 import { Miner } from '../web/js/miner.js';
 import { parseSeeds, parseList } from '../web/js/expand.js';
 import { serialize, FORMATS } from '../web/js/export.js';
@@ -38,9 +38,12 @@ Expansion (long-tail):
       --expand-recursive    Also apply expansion strategies on recursive levels (huge!)
       --must-contain        Keep only suggestions containing every seed word
 
-Locale:
-  -l, --lang <hl>           Language, e.g. en, tr, de (default en)
-  -c, --country <gl>        Country, e.g. us, tr, de (default us)
+Locale (search language & country — sent to every engine that supports it):
+  -l, --lang <hl>           Search language, ISO 639-1: tr, en, de, fr, ar, ru… (default ${DEFAULT_LOCALE.hl})
+  -c, --country <gl>        Search country/region, ISO 3166-1 alpha-2: tr, us, gb, de… (default ${DEFAULT_LOCALE.gl})
+                            Also picks the Amazon marketplace, eBay site, Yahoo region, Yandex region,
+                            and the alphabet / question words used for expansion.
+                            See which engines use them:  afkrt --list-engines
 
 Limits / politeness:
       --delay <ms>          Delay between requests to the same engine (default 400)
@@ -59,7 +62,7 @@ Output:
 `;
 
 function parseArgs(argv) {
-  const a = { seeds: [], outs: [], engines: null, expand: 'alpha', depth: 0, lang: 'en', country: 'us', delay: 400, concurrency: 4, maxQueries: 2000, maxResults: 50000, timeout: 10000, format: 'txt' };
+  const a = { seeds: [], outs: [], engines: null, expand: 'alpha', depth: 0, lang: DEFAULT_LOCALE.hl, country: DEFAULT_LOCALE.gl, delay: 400, concurrency: 4, maxQueries: 2000, maxResults: 50000, timeout: 10000, format: 'txt' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const v = () => { const x = argv[++i]; if (x === undefined) throw new Error(`Missing value for ${k}`); return x; };
@@ -74,8 +77,8 @@ function parseArgs(argv) {
       case '-d': case '--depth': a.depth = Number(v()); break;
       case '--expand-recursive': a.expandRecursive = true; break;
       case '--must-contain': a.mustContain = true; break;
-      case '-l': case '--lang': a.lang = v(); break;
-      case '-c': case '--country': a.country = v(); break;
+      case '-l': case '--lang': a.lang = v().toLowerCase(); break;
+      case '-c': case '--country': a.country = v().toLowerCase(); break;
       case '--delay': a.delay = Number(v()); break;
       case '--concurrency': a.concurrency = Number(v()); break;
       case '--max-queries': a.maxQueries = Number(v()); break;
@@ -90,6 +93,12 @@ function parseArgs(argv) {
         a.seeds.push(k);
     }
   }
+  if (!isValidLang(a.lang)) throw new Error(`Invalid --lang "${a.lang}" (use a code like tr, en, de, pt-br)`);
+  if (!isValidCountry(a.country)) throw new Error(`Invalid --country "${a.country}" (use a 2-letter code like tr, us, gb)`);
+  const ints = { depth: [0, 10], delay: [0, 60000], concurrency: [1, 32], maxQueries: [1, 1e6], maxResults: [1, 1e7], timeout: [1000, 120000] };
+  for (const [k, [min, max]] of Object.entries(ints)) {
+    if (!Number.isInteger(a[k]) || a[k] < min || a[k] > max) throw new Error(`--${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} must be an integer between ${min} and ${max}`);
+  }
   return a;
 }
 
@@ -99,7 +108,7 @@ function resolveEngines(spec) {
   for (const part of parseList(spec.toLowerCase())) {
     if (part === 'all') ENGINES.filter((e) => !e.experimental).forEach((e) => out.add(e.id));
     else if (ENGINES.some((e) => e.category === part)) ENGINES.filter((e) => e.category === part && !e.experimental).forEach((e) => out.add(e.id));
-    else if (ENGINE_MAP[part]) out.add(part);
+    else if (isEngineId(part)) out.add(part);
     else throw new Error(`Unknown engine "${part}". Use --list-engines.`);
   }
   return [...out];
@@ -133,8 +142,9 @@ async function main() {
   const a = parseArgs(process.argv.slice(2));
   if (a.help) { console.log(HELP); return; }
   if (a.list) {
-    console.log('id               category   browser  notes');
-    for (const e of ENGINES) console.log(`${e.id.padEnd(16)} ${e.category.padEnd(10)} ${(e.jsonp ? 'jsonp' : e.cors ? 'cors' : 'proxy').padEnd(8)} ${e.backend}${e.region ? ` · ${e.region}` : ''}${e.experimental ? ' · experimental' : ''}`);
+    console.log('id               category   browser  locale  notes');
+    for (const e of ENGINES) console.log(`${e.id.padEnd(16)} ${e.category.padEnd(10)} ${(e.jsonp ? 'jsonp' : e.cors ? 'cors' : 'proxy').padEnd(8)} ${localeSupport(e).padEnd(7)} ${e.backend}${e.region ? ` · ${e.region} only` : ''}${e.localeNote ? ` · ${e.localeNote}` : ''}${e.experimental ? ' · experimental' : ''}`);
+    console.log('\nlocale: hl+gl = language and country used · hl = language only · gl = country only · fixed = ignores both');
     return;
   }
 
@@ -146,7 +156,9 @@ async function main() {
 
   const engines = resolveEngines(a.engines);
   const log = (...m) => { if (!a.quiet) process.stderr.write(`${m.join(' ')}\n`); };
-  log(`▸ ${seeds.length} seed(s) · engines: ${engines.join(', ')} · depth ${a.depth}`);
+  log(`▸ ${seeds.length} seed(s) · lang ${a.lang} · country ${a.country} · engines: ${engines.join(', ')} · depth ${a.depth}`);
+  const fixed = engines.filter((id) => localeSupport(ENGINES.find((e) => e.id === id)) === 'fixed');
+  if (fixed.length) log(`  note: ${fixed.join(', ')} ignore language/country (single-market engines)`);
 
   const miner = new Miner({
     fetcher: createHttpFetcher(a.userAgent ? { userAgent: a.userAgent } : {}),

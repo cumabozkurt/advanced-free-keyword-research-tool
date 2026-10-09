@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- JSONP is only allowed from the fixed engine hosts below; fetch() may reach CORS engines and a user-chosen proxy. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://suggestqueries.google.com https://api.bing.com https://search.yahoo.com https://*.search.yahoo.com https://duckduckgo.com https://suggestion.baidu.com https://sug.so.360.cn https://ac.search.naver.com; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; img-src 'self' data:; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <title>Advanced Free Keyword Research Tool</title>
   <meta name="description" content="Advanced Free Keyword Research Tool — free bulk long-tail keyword ideas from Google, Bing, YouTube, Yahoo, DuckDuckGo, Yandex, Baidu, Amazon, eBay and more. Export TXT, CSV, TSV, JSON. No API keys.">
   <meta name="theme-color" content="#0b0f17">
@@ -14,6 +17,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <noscript><p class="noscript">This app needs JavaScript. / Bu uygulama JavaScript gerektirir.</p></noscript>
   <a class="skip" href="#results">Skip to results</a>
   <header class="topbar">
     <div class="brand">
@@ -51,8 +55,11 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2 class="h2" data-i18n="locale"></h2>
+      <section class="card" aria-labelledby="localeTitle">
+        <div class="card-head">
+          <h2 class="h2" id="localeTitle" data-i18n="locale"></h2>
+          <div class="chip-actions" id="localePresets"></div>
+        </div>
         <div class="grid2">
           <label><span data-i18n="language"></span>
             <select id="hl"></select>
@@ -61,6 +68,8 @@
             <select id="gl"></select>
           </label>
         </div>
+        <p class="hint" data-i18n="localeHint"></p>
+        <p class="hint" id="localeInfo"></p>
       </section>
 
       <section class="card">

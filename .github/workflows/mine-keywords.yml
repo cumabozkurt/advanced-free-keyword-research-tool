@@ -9,7 +9,7 @@ on:
       keywords:
         description: 'Seed keywords (comma separated)'
         required: true
-        default: 'seo tools, keyword research'
+        default: 'seo araçları, anahtar kelime analizi'
       engines:
         description: 'Engines: ids, "all", "web", "shopping", "video" (comma separated)'
         required: true
@@ -23,13 +23,13 @@ on:
         required: true
         default: '0'
       lang:
-        description: 'Language (hl), e.g. en, tr, de'
+        description: 'Search language (hl), e.g. tr, en, de'
         required: true
-        default: 'en'
+        default: 'tr'
       country:
-        description: 'Country (gl), e.g. us, tr, de'
+        description: 'Search country/region (gl), e.g. tr, us, gb, de'
         required: true
-        default: 'us'
+        default: 'tr'
 
 permissions:
   contents: read

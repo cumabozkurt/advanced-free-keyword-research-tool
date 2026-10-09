@@ -12,6 +12,11 @@ export const ALPHABETS = {
   pt: 'abcdefghijklmnopqrstuvwxyz'.split(''),
   it: 'abcdefghijklmnopqrstuvwxyz'.split(''),
   ru: 'абвгдеёжзийклмнопрстуфхцчшщэюя'.split(''),
+  uk: 'абвгґдеєжзиіїйклмнопрстуфхцчшщьюя'.split(''),
+  az: 'abcçdeəfgğhxıijkqlmnoöprsştuüvyz'.split(''),
+  pl: 'aąbcćdeęfghijklłmnńoóprsśtuwyzźż'.split(''),
+  nl: 'abcdefghijklmnopqrstuvwxyz'.split(''),
+  id: 'abcdefghijklmnopqrstuvwxyz'.split(''),
 };
 
 export const DIGITS = '0123456789'.split('');
@@ -50,7 +55,14 @@ export const DEFAULT_EXPANSION = {
   lang: 'en',
 };
 
-const pick = (table, l) => table[l] || table[(l || '').split('-')[0]] || table.en;
+const own = (t, k) => Object.prototype.hasOwnProperty.call(t, k);
+export const pick = (table, l) => {
+  const full = String(l || '').toLowerCase();
+  const base = full.split('-')[0];
+  return own(table, full) ? table[full] : own(table, base) ? table[base] : table.en;
+};
+/** Which alphabet key is used for a language (for UI display). */
+export const alphabetKey = (l) => { const b = String(l || '').toLowerCase().split('-')[0]; return own(ALPHABETS, b) ? b : 'en'; };
 
 /**
  * Build the list of queries for one seed.

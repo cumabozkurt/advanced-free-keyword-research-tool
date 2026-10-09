@@ -10,6 +10,8 @@ import { createHttpFetcher } from '../lib/http-fetcher.js';
 const args = process.argv.slice(2);
 const asJson = args.includes('--json');
 const ua = args.find((a) => a.startsWith('--ua='))?.slice(5);
+const hl = args.find((a) => a.startsWith('--hl='))?.slice(5) || 'en';
+const gl = args.find((a) => a.startsWith('--gl='))?.slice(5) || 'us';
 const fetcher = createHttpFetcher(ua ? { userAgent: ua } : {});
 const probes = { baidu: '手机', so360: '手机', sogou: '手机', quark: '手机', naver: '코딩', seznam: 'auto', default: 'seo tools' };
 
@@ -19,7 +21,7 @@ for (const e of ENGINES) {
   const t0 = Date.now();
   let ok = false; let n = 0; let sample = ''; let error = '';
   try {
-    const s = await fetcher(e.id, q, { hl: 'en', gl: 'us', timeoutMs: 12000 });
+    const s = await fetcher(e.id, q, { hl, gl, timeoutMs: 12000 });
     n = s.length; ok = n > 0; sample = s.slice(0, 3).join(' | ');
     if (!ok) error = 'empty';
   } catch (err) { error = String(err.message || err); }

@@ -8,6 +8,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; background: radial-gradient(1200px 600px at 10% -10%, #1b1640 0%, transparent 60%), radial-gradient(900px 500px at 110% 0%, #0c2a3a 0%, transparent 55%), var(--bg); color: var(--text); font: 15px/1.5 var(--font); min-height: 100%; }
 a { color: var(--accent2); }
 .skip { position: absolute; left: -999px; top: 0; background: var(--accent); color: #fff; padding: 8px 12px; z-index: 99; }
@@ -58,14 +59,14 @@ textarea:focus, input:focus, select:focus, .btn:focus-visible, .link:focus-visib
 
 .engine-list { display: flex; flex-direction: column; gap: 10px; }
 .engine-group h3 { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 4px 0 6px; }
-.engine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.engine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 6px; }
 .engine { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 10px; background: #0f1524; cursor: pointer; color: var(--text); font-size: .85rem; user-select: none; }
 .engine:hover { border-color: #3a4867; }
 .engine:has(input:checked) { border-color: rgba(124,92,255,.7); background: rgba(124,92,255,.12); }
 .engine.unavailable { opacity: .55; }
 .engine input { accent-color: var(--accent); margin: 0; }
-.engine .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.badge { font-size: .62rem; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.engine .name { flex: 1; min-width: 0; line-height: 1.2; overflow-wrap: anywhere; }
+.badge { font-size: .6rem; padding: 1px 5px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .badge.direct { color: var(--ok); border-color: rgba(52,211,153,.35); }
 .badge.proxy { color: var(--warn); border-color: rgba(251,191,36,.35); }
 
@@ -133,3 +134,6 @@ tr:hover .kw-actions, .kw-actions:focus-within { opacity: 1; }
   .engine-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.noscript { padding: 16px; }
+#localeInfo { min-height: 1em; }
