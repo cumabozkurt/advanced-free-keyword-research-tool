@@ -1,4 +1,5 @@
-import { ENGINES, ENGINE_MAP, DEFAULT_ENGINES, CATEGORIES, DEFAULT_LOCALE, isEngineId, isValidLang, isValidCountry, localeSupport, localeTarget } from './engines.js';
+import { ENGINES, ENGINE_MAP, DEFAULT_ENGINES, CATEGORIES, DEFAULT_LOCALE, isEngineId, isValidLang, isValidCountry, localeSupport, localeTarget, sourceName } from './engines.js';
+import { runSerpPhase, SerpBlockedError, SERP_LIMITS } from './serp-client.js';
 import { Miner } from './miner.js';
 import { expandSeed, parseSeeds, parseList, ALPHABETS, alphabetKey } from './expand.js';
 import { serialize, fileName, MIME } from './export.js';
@@ -42,6 +43,8 @@ const state = {
   proxyAuto: '',
   renderPending: false,
   notices: [],
+  serpInfo: null,       // { available, backend, reason } from the local server's /api/health
+  serpBase: '',
 };
 
 // ---------------- settings ----------------
@@ -50,6 +53,7 @@ const defaults = () => ({
   seeds: '', hl: DEFAULT_LOCALE.hl, gl: DEFAULT_LOCALE.gl, engines: DEFAULT_ENGINES,
   expansion: { seed: true, alphaSuffix: true }, customPrefixes: '', customSuffixes: '',
   depth: 0, maxQueries: 300, delay: 350, concurrency: 4, expandRecursive: false, mustContain: false, proxyUrl: '',
+  serp: { enabled: false, pages: SERP_LIMITS.defaultPages, delaySec: SERP_LIMITS.defaultDelayMs / 1000, related: true, paa: true, organic: false },
 });
 function loadSettings() {
   try { return { ...defaults(), ...JSON.parse(localStorage.getItem(STORE_KEY) || '{}') }; } catch { return defaults(); }
@@ -72,6 +76,7 @@ function applyI18n() {
   updateSeedCount();
   updateLocaleInfo();
   updateControls();
+  updateSerpStatus();
   scheduleRender();
 }
 
@@ -184,6 +189,12 @@ function readForm() {
     delay: num('delay', 100, 10000, 350), concurrency: num('concurrency', 1, 12, 4),
     expandRecursive: $('expandRecursive').checked, mustContain: $('mustContain').checked,
     proxyUrl: $('proxyUrl').value.trim(),
+    serp: {
+      enabled: $('serpEnabled').checked,
+      pages: num('serpPages', 1, SERP_LIMITS.maxPages, SERP_LIMITS.defaultPages),
+      delaySec: num('serpDelay', SERP_LIMITS.minDelayMs / 1000, 600, SERP_LIMITS.defaultDelayMs / 1000),
+      related: $('serpRelated').checked, paa: $('serpPaa').checked, organic: $('serpOrganic').checked,
+    },
   };
 }
 
@@ -198,7 +209,9 @@ function updateSeedCount() {
   const usable = f.engines.filter((id) => browserMode(ENGINE_MAP[id], proxyUrl()));
   const perSeed = seeds.length ? expandSeed(seeds[0], expansionOptions(f)).length : 0;
   const total = Math.min(seeds.length * perSeed, f.maxQueries) * usable.length;
-  $('estimate').textContent = total ? t('estimate', { n: total.toLocaleString() }) + (f.depth ? ' + …' : '') : '';
+  const serpPages = serpUsable(f) ? seeds.length * f.serp.pages : 0;
+  $('estimate').textContent = (total ? t('estimate', { n: total.toLocaleString() }) + (f.depth ? ' + …' : '') : '')
+    + (serpPages ? ` + ≤${serpPages.toLocaleString()} Google SERP` : '');
 }
 
 // ---------------- run ----------------
@@ -230,11 +243,20 @@ async function start(ev) {
   const usable = f.engines.filter((id) => browserMode(ENGINE_MAP[id], proxy));
   const skipped = f.engines.filter((id) => !usable.includes(id));
   if (skipped.length) notice(t('proxyMissing', { list: skipped.map((id) => ENGINE_MAP[id].name).join(', ') }));
-  if (!usable.length) { notice(t('noEngines')); return; }
+  const serpOn = serpUsable(f);
+  if (f.serp.enabled && !serpOn) notice(serpStatusText());
+  if (!usable.length && !serpOn) { notice(t('noEngines')); return; }
   saveSettings();
 
-  state.lastMeta = { seeds, engines: usable, lang: f.hl, country: f.gl, depth: f.depth };
+  const serpSources = ['related', 'paa', 'organic'].filter((k) => f.serp[k]);
+  state.lastMeta = { seeds, engines: usable, lang: f.hl, country: f.gl, depth: f.depth, ...(serpOn ? { serp: { pages: f.serp.pages, sources: serpSources } } : {}) };
+  const alongside = serpOn ? [(m) => runSerpPhase({
+    miner: m, seeds, pages: f.serp.pages, sources: serpSources, delayMs: f.serp.delaySec * 1000,
+    fetchPage: serpFetchPage(state.serpBase),
+    onStatus: onSerpStatus,
+  })] : [];
   const miner = new Miner({
+    alongside,
     fetcher: createBrowserFetcher({ proxyUrl: proxy }),
     engines: usable, seeds, hl: f.hl, gl: f.gl,
     expansion: expansionOptions(f), depth: f.depth, expandRecursive: f.expandRecursive,
@@ -247,7 +269,7 @@ async function start(ev) {
   });
   miner.on('progress', updateStats);
   miner.on('state', updateControls);
-  miner.on('engineDisabled', ({ engine, error }) => notice(t('engineDisabled', { engine: ENGINE_MAP[engine].name, error })));
+  miner.on('engineDisabled', ({ engine, error }) => notice(t('engineDisabled', { engine: sourceName(engine), error })));
   updateControls();
   // merge with previous results (so users can run several batches)
   for (const r of state.records) miner.results.set(r.norm, r);
@@ -280,7 +302,7 @@ function updateStats(p) {
     el.className = `estat${s.disabled || s.errors > s.ok ? ' err' : ''}`;
     el.title = `${t('requests')}: ${s.requests} · suggestions: ${s.suggestions} · new: ${s.found}${s.lastError ? ` · ${s.lastError}` : ''}`;
     const b = document.createElement('b');
-    b.textContent = ENGINE_MAP[id].name;
+    b.textContent = sourceName(id);
     el.append(b, ` ${s.suggestions} (+${s.found}) · ${s.requests}${s.errors ? ` · ⚠${s.errors}` : ''}`);
     return el;
   }));
@@ -335,7 +357,7 @@ function render() {
     acts.append(copy, a); wrap.append(acts); kw.append(wrap);
     const eng = document.createElement('td');
     const chips = document.createElement('div'); chips.className = 'chips';
-    for (const id of r.engines) { const c = document.createElement('span'); c.className = 'chip'; c.textContent = ENGINE_MAP[id]?.name || id; chips.append(c); }
+    for (const id of r.engines) { const c = document.createElement('span'); c.className = 'chip'; c.textContent = sourceName(id); chips.append(c); }
     eng.append(chips);
     const hits = document.createElement('td'); hits.className = 'num-col'; hits.textContent = String(r.hits);
     const words = document.createElement('td'); words.className = 'num-col hide-sm'; words.textContent = String(wordCount(r.keyword));
@@ -375,6 +397,43 @@ async function copyText(text) {
   }
 }
 
+// ---------------- Google SERP pages (local server only) ----------------
+function serpUsable(f) {
+  return Boolean(f.serp.enabled && state.serpInfo?.available && state.serpBase && (f.serp.related || f.serp.paa || f.serp.organic));
+}
+
+function serpStatusText() {
+  if (state.serpInfo?.available) return t('serpReady', { backend: state.serpInfo.backend || 'browser' });
+  if (state.serpInfo) return t('serpUnavailable', { reason: state.serpInfo.reason || '—' });
+  return t('serpNeedsServer');
+}
+
+function updateSerpStatus() {
+  const ok = Boolean(state.serpInfo?.available);
+  $('serpStatus').textContent = serpStatusText();
+  $('serpStatus').classList.toggle('warn', !ok);
+  for (const id of ['serpPages', 'serpDelay', 'serpRelated', 'serpPaa', 'serpOrganic']) $(id).disabled = !ok;
+}
+
+/** fetchPage for runSerpPhase: one parsed Google page from the local server's /api/serp. */
+function serpFetchPage(base) {
+  return async (q, page, { hl, gl, signal }) => {
+    const u = `${base}/api/serp?${new URLSearchParams({ q, page: String(page), hl, gl })}`;
+    const res = await fetch(u, { signal });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 403 || res.status === 503) throw new SerpBlockedError('unavailable', body.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  };
+}
+
+function onSerpStatus(s) {
+  if (s.type === 'page') $('serpStatus').textContent = t('serpProgress', s);
+  else if (s.type === 'blocked') notice(t('serpBlocked', { status: s.status, page: s.page, hint: t(`serpHint_${s.status}`) === `serpHint_${s.status}` ? (s.error || '') : t(`serpHint_${s.status}`) }));
+  else if (s.type === 'error') notice(t('serpError', { error: s.error }));
+  else if (s.type === 'done') $('serpStatus').textContent = t('serpDone', { pages: s.pages, found: s.found });
+}
+
 // ---------------- proxy ----------------
 async function testProxy(url, silent = false) {
   if (!url) return false;
@@ -383,7 +442,9 @@ async function testProxy(url, silent = false) {
     const timer = setTimeout(() => ctrl.abort(), 2500);
     const res = await fetch(`${url.replace(/\/+$/, '')}/api/health`, { signal: ctrl.signal });
     clearTimeout(timer);
-    const ok = res.ok && (await res.json()).ok;
+    const body = res.ok ? await res.json() : {};
+    const ok = Boolean(body.ok);
+    if (ok) { state.serpInfo = body.serp || { available: false, reason: 'this proxy has no SERP support (Cloudflare Worker / older server)' }; state.serpBase = url.replace(/\/+$/, ''); updateSerpStatus(); updateSeedCount(); }
     if (!silent) $('proxyStatus').textContent = ok ? t('proxyOk') : t('proxyFail');
     return ok;
   } catch {
@@ -403,6 +464,9 @@ function init() {
   $('depth').value = s.depth; $('maxQueries').value = s.maxQueries; $('delay').value = s.delay; $('concurrency').value = s.concurrency;
   $('expandRecursive').checked = s.expandRecursive; $('mustContain').checked = s.mustContain;
   $('proxyUrl').value = s.proxyUrl;
+  const sp = { ...defaults().serp, ...(s.serp || {}) };
+  $('serpEnabled').checked = Boolean(sp.enabled); $('serpPages').value = sp.pages; $('serpDelay').value = sp.delaySec;
+  $('serpRelated').checked = Boolean(sp.related); $('serpPaa').checked = Boolean(sp.paa); $('serpOrganic').checked = Boolean(sp.organic);
   renderEngines((s.engines || []).filter(isEngineId));
   renderExpansions(s.expansion || {});
 
@@ -417,6 +481,7 @@ function init() {
   if (params.get('lang') && STRINGS[params.get('lang')]) state.lang = params.get('lang');
 
   applyI18n();
+  updateSerpStatus();
 
   $('form').addEventListener('submit', start);
   $('pauseBtn').addEventListener('click', () => { const m = state.miner; if (!m) return; m.paused ? m.resume() : m.pause(); updateControls(); });
@@ -431,7 +496,7 @@ function init() {
   $('langToggle').addEventListener('click', () => { state.lang = state.lang === 'tr' ? 'en' : 'tr'; applyI18n(); saveSettings(); });
   $('form').addEventListener('change', (e) => {
     if (e.target.dataset?.exp === 'custom') $('customBox').hidden = !e.target.checked;
-    if (e.target.id === 'proxyUrl') renderEngines(readEnginesSelection());
+    if (e.target.id === 'proxyUrl') { renderEngines(readEnginesSelection()); const u = $('proxyUrl').value.trim(); if (u) testProxy(u, true); }
     updateLocaleInfo(); updateSeedCount(); saveSettings();
   });
   $('seeds').addEventListener('input', () => { updateSeedCount(); clearTimeout(init.t); init.t = setTimeout(saveSettings, 400); });
@@ -463,6 +528,7 @@ function init() {
       if (ok) { state.proxyAuto = location.origin; $('proxyStatus').textContent = t('proxyAuto'); renderEngines(readEnginesSelection()); updateSeedCount(); }
     });
   }
+  if (s.proxyUrl) testProxy(s.proxyUrl, true).then(() => updateSeedCount());
   render();
   if (params.get('run') === '1' && parseSeeds($('seeds').value).length) start();
 }

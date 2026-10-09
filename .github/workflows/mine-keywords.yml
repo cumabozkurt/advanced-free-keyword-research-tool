@@ -30,6 +30,10 @@ on:
         description: 'Search country/region (gl), e.g. tr, us, gb, de'
         required: true
         default: 'tr'
+      serp_pages:
+        description: 'Google result pages per keyword (0 = off, max 100). Runner IPs are usually CAPTCHA-blocked by Google; autocomplete still runs.'
+        required: true
+        default: '0'
 
 permissions:
   contents: read
@@ -43,6 +47,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install optional SERP dependency
+        if: ${{ inputs.serp_pages != '0' }}
+        run: npm ci --no-audit --no-fund
       - name: Mine
         env:
           KEYWORDS: ${{ inputs.keywords }}
@@ -51,10 +58,14 @@ jobs:
           DEPTH: ${{ inputs.depth }}
           HL: ${{ inputs.lang }}
           GL: ${{ inputs.country }}
+          SERP_PAGES: ${{ inputs.serp_pages }}
+          AFKRT_CHROME_NO_SANDBOX: '1'
         run: |
           printf '%s' "$KEYWORDS" | tr ',' '\n' > seeds.txt
+          SERP=()
+          if [ "$SERP_PAGES" != "0" ]; then SERP=(--serp --serp-pages "$SERP_PAGES"); fi
           node bin/cli.js -f seeds.txt -e "$ENGINES" -x "$EXPAND" -d "$DEPTH" -l "$HL" -c "$GL" \
-            --max-queries 3000 --max-results 100000 \
+            --max-queries 3000 --max-results 100000 "${SERP[@]}" \
             -o out/keywords.txt -o out/keywords.csv -o out/keywords.tsv -o out/keywords.json
       - name: Summary
         run: |

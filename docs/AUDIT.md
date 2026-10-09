@@ -66,3 +66,11 @@ locale validation, alphabet selection, Turkish question detection and `İ` foldi
 - Some engines rate-limit bursts from one IP (seen: Ecosia HTTP 503 after a few hundred requests in testing). The miner backs off on 429/503 and disables an engine after 6 consecutive failures; raise the delay for long runs.
 - Single-market engines (Baidu, 360, Sogou, Quark, Naver, Seznam, Walmart) ignore language/country by design.
 - No search volume / CPC data (would need paid APIs).
+
+## 1.1.0 — Google SERP pagination review
+
+- `/api/serp` is loopback-only with an Origin check (403 otherwise) and returns parsed keyword fields only — no raw HTML, so it cannot be used as a generic fetcher.
+- Server-side politeness independent of the client: serialised page loads, ≥4 s gap (`--serp-gap`), 6 h cache, 15-minute cool-down after a CAPTCHA (no Google request at all during it).
+- Client/CLI: pages clamped to 1–100, delay ≥2 s, stop on CAPTCHA / consent / JS wall / 3 errors; SERP failures never stop autocomplete (`Miner.alongside`).
+- Verified: real Google from the build server → CAPTCHA on page 1, reported in UI and CLI, autocomplete results still exported. Fake-Google E2E (CLI, server, web UI, real Chrome backend) pass.
+- CAPTCHA fixture is a real captured page with the IP address and tokens redacted.

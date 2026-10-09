@@ -24,9 +24,10 @@ Google · Bing · YouTube · Yahoo · DuckDuckGo · Yandex · Baidu · Naver · 
 - **Filtrele & sırala** — arama, hariç tutulan kelimeler, minimum kelime, sadece sorular
 - **Dışa aktarma** — TXT, CSV (Excel için UTF-8 BOM, formül enjeksiyonuna karşı korumalı), TSV, JSON, Markdown, panoya kopyala
 - **Nazik tasarım** — motor başına bekleme, paralellik sınırı, en fazla istek sayısı, duraklat / devam / durdur, hata veren motoru otomatik kapatma
+- **Google sonuç sayfası (SERP) taraması** — isteğe bağlı olarak her kelime için Google sonuç sayfalarını 1…100 arası gezer; *ilgili aramaları*, *Diğer kullanıcılar şunları da sordu* sorularını ve (isteğe bağlı) organik başlıkları toplar; CAPTCHA'da kibarca durur — bkz. [Google sonuç sayfaları](#google-sonuç-sayfaları-serp)
 - **Arama dili ve ülkesi** (varsayılan 🇹🇷 `tr` / `tr`) destekleyen her motora iletilir — bkz. [Dil ve ülke](#dil-ve-ülke)
 - **Türkçe & İngilizce arayüz**, koyu tema, klavye erişilebilir, mobil uyumlu, ayarlar tarayıcıda saklanır
-- **Sıfır bağımlılık, derleme yok** — tarayıcı ve Node aynı ES modüllerini kullanır
+- **Çalışma zamanı bağımlılığı yok, derleme yok** — tarayıcı ve Node aynı ES modüllerini kullanır (isteğe bağlı SERP tarayıcı arka ucu `puppeteer-core` kullanır)
 
 ## Kullanım yolları
 
@@ -43,6 +44,7 @@ Paylaşılabilir bağlantı: `…/?q=seo+araçları&engines=google,bing,youtube&
 git clone https://github.com/cumabozkurt/advanced-free-keyword-research-tool
 cd advanced-free-keyword-research-tool
 npm start            # → http://localhost:8787  (Node 18+, kurulacak bir şey yok)
+# isteğe bağlı, Google sonuç sayfası taraması için:  npm install  (sonra yeniden başlatın)
 ```
 
 Uygulama yerleşik proxy'yi otomatik algılar ve tüm motorları açar.
@@ -99,6 +101,57 @@ Varsayılan: **Türkçe / Türkiye** (`tr` / `tr`).
 | Wikipedia | `{hl}.wikipedia.org` |
 | Baidu, 360, Sogou, Quark (CN) · Naver (KR) · Seznam (CZ) · Walmart (US) | tek pazar — dil/ülke yok sayılır |
 
+## Google sonuç sayfaları (SERP)
+
+Otomatik tamamlama yalnızca insanların *yazdığını* gösterir. Google sonuç sayfaları buna **ilgili aramaları** ("İlgili aramalar" /
+"Searches related to"), **Diğer kullanıcılar şunları da sordu (PAA)** sorularını ve sonuç başlıklarını ekler. Bu seçenek açıldığında araç
+her kelime için `start=0,10,20…` sonuç sayfalarını sırayla açar (1–100 sayfa, varsayılan 10), yalnızca bu anahtar kelime alanlarını çıkarır
+(HTML saklanmaz/gösterilmez), kaynağa göre etiketler (`serp-related`, `serp-paa`, `serp-organic`) ve aynı tekilleştirilmiş sonuçlara ve
+dışa aktarımlara ekler. Otomatik tamamlama motorları paralel olarak çalışmaya devam eder.
+
+**Nerede çalışır:** Yalnızca CLI ve yerel sunucu (bir kez `npm install`, sonra `npm start` veya CLI). Statik GitHub Pages sitesi Google
+sonuç sayfalarını okuyamaz (CORS + Google JavaScript ister); Pages uygulamasını yerel sunucunuza yönlendirirseniz o da kullanabilir.
+GitHub Action'da `serp_pages` girdisi var, ancak GitHub sunucu IP'leri neredeyse her zaman CAPTCHA ile engellenir.
+
+```bash
+npm install                                     # isteğe bağlı puppeteer-core (SİZİN kurulu Chrome/Chromium/Edge tarayıcınızı kullanır)
+node bin/cli.js "kahve makinesi" --serp                       # otomatik tamamlama + 10 Google sayfası, ilgili + PAA
+node bin/cli.js "kahve makinesi" --serp-only --serp-pages 30 --serp-sources related,paa,organic -o kahve.csv
+npm start                                       # web uygulaması: "Google arama sayfalarını tara" kutusunu işaretleyin (1–100 sayfa)
+```
+
+| CLI seçeneği | Anlamı |
+|---|---|
+| `--serp` | otomatik tamamlamaya ek olarak SERP sayfalarını tara |
+| `--serp-only` | yalnızca SERP sayfaları, otomatik tamamlama yok |
+| `--serp-pages <1-100>` | kelime başına sayfa (varsayılan 10) |
+| `--serp-sources related,paa,organic` | toplanacaklar (varsayılan `related,paa`) |
+| `--serp-delay <ms>` | sayfa yüklemeleri arası bekleme, en az 2000 (varsayılan 5000) |
+| `--serp-backend browser\|html` | `browser` = puppeteer-core ile yerel Chrome (varsayılan); `html` = düz HTTP (Google şu an JavaScript duvarı gösteriyor) |
+| `--serp-headful`, `--serp-chrome <yol>`, `--serp-profile <klasör>` | tarayıcı penceresini göster, tarayıcı dosyasını seç (veya `CHROME_PATH`), profili yeniden kullan (çerez onayı seçiminiz kalır) |
+
+Sunucu seçenekleri: `--no-serp`, `--serp-backend`, `--serp-headful`, `--serp-chrome`, `--serp-profile`, `--serp-gap <ms>` (Google sayfa yüklemeleri arası en az süre, varsayılan 4000).
+`/api/serp` yalnızca yerel sunucunun loopback istemcilerine yanıt verir (aynı köken veya `--allow-origin`), yalnızca ayrıştırılmış alanları döndürür,
+sayfa yüklemelerini sıraya koyar, sonuçları 6 saat önbellekte tutar ve CAPTCHA'dan sonra 15 dakika boyunca Google'a yeni istek göndermez.
+Dil ve ülke seçimleri `hl`, `gl` ve `lr=lang_{hl}` (artı `pws=0`) olarak gönderilir.
+
+**Gözlemlediğimiz sınırlar (Ekim 2026) — lütfen okuyun:**
+
+- Google **sayfa başına 10 sonuç** verir (`num=` artık dikkate alınmıyor); 100 sayfa = en fazla ~1000 sonuç. Pratikte Google çoğu zaman
+  birkaç ila birkaç düzine sayfadan sonra "Sonraki" bağlantısını kaldırır — araç o kelime için durur.
+- Düz HTTP istemcileri (curl, Node `fetch`, metin tarayıcılar) sonuç yerine **"JavaScript'i etkinleştirin" duvarı** alır.
+- **Veri merkezi / bulut / CI IP'lerinden** gerçek headless Chrome, **"sıra dışı trafik" CAPTCHA'sı** (`/sorry/`) alır — test sunucumuzda daha
+  ilk sayfada. Normal ev/ofis bağlantısında, az sayfa ve uzun beklemeyle sonuçlar çok daha iyidir.
+- İlgili aramalar ve PAA blokları her sorguda/sayfada gösterilmez; organik başlıklar anahtar kelime olarak gürültülüdür (varsayılan kapalı).
+- Google'ın resmî Custom Search JSON API'si yeni müşterilere kapalı ve 1 Ocak 2027'de kapanıyor, bu yüzden sunulmuyor.
+
+**CAPTCHA, çerez onayı veya JavaScript duvarında SERP aşaması hemen durur** ve nedenini bildirir; otomatik tamamlama devam eder.
+Bilinçli olarak **CAPTCHA çözme, proxy rotasyonu, gizlenme / parmak izi sahteciliği yoktur** — bunlar bot korumasını atlatmadır ve kapsam dışıdır.
+
+> ⚠️ **Kullanım Şartları:** Google Hizmet Şartları, arama sonuç sayfalarının otomatik olarak sorgulanmasına izin vermez.
+> Bu özellik kişisel araştırma için sıradan bir tarayıcıyı yavaş tempoda kullanır; yine de kullanım **sizin sorumluluğunuzdadır**
+> (tipik sonuç IP'nizin geçici olarak engellenmesidir). Az sayfa kullanın, beklemeleri koruyun; hacim için otomatik tamamlama motorlarını tercih edin.
+
 ## Motorlar
 
 | | Motorlar |
@@ -115,7 +168,7 @@ Aynı `web/js/engines.js` (motor kayıtları) ve `web/js/miner.js` (kuyruk, hız
 ## Geliştirme
 
 ```bash
-npm test        # 33 test (bağımlılık yok): ayrıştırıcılar, dil/ülke, kuyruk, dışa aktarma, proxy, CLI, sunucu
+npm test        # 45 test: ayrıştırıcılar, dil/ülke, kuyruk, dışa aktarma, proxy, CLI, sunucu, SERP (gerçek CAPTCHA sayfası dahil HTML örnekleri, sahte Google uçtan uca)
 npm run check   # canlı uç nokta kontrolü
 npm start       # yerel sunucu
 ```
@@ -129,11 +182,13 @@ Yeni motor eklemek = `web/js/engines.js` içine bir nesne (+ bir ayrıştırıc�
 - Proxy (yerel sunucu / Worker) **açık proxy değildir**: motorlar izin listesindedir, hedef URL sunucuda oluşturulur, `hl`/`gl` doğrulanır,
   sorgu uzunluğu ve yanıt boyutu (2 MB) sınırlıdır, IP başına hız sınırı ve önbellek vardır.
 - Yerel sunucu varsayılan olarak `127.0.0.1` adresini dinler ve yalnızca izin verilen kaynaklara CORS açar (`--allow-origin`).
+- `/api/serp` yalnızca loopback istemcilere yanıt verir (yabancı `Origin` → 403), ham HTML döndürmez ve `--serp-profile` verilmedikçe temiz bir tarayıcı profili kullanır.
 
 ## Sorumlu kullanım
 
 Bu araç **herkese açık otomatik tamamlama uç noktalarını** düşük hızda okur — bir tarayıcının arama kutusunun yaptığı isteklerle aynı.
 Varsayılan bekleme sürelerini koruyun, servisleri yormayın ve her sağlayıcının kullanım koşullarına uyun. Captcha veya bot korumasını aşmaz.
+İsteğe bağlı Google SERP modu sonuç sayfalarını okur; Google'ın şartları otomatik istemcilere buna izin vermez — [yukarıdaki uyarıya](#google-sonuç-sayfaları-serp) bakın.
 Uç noktalar resmî değildir ve her an değişebilir.
 
 ## Teşekkür & lisans

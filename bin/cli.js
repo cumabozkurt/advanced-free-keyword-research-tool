@@ -5,6 +5,7 @@
  *   afkrt "seo tools"
  *   afkrt -f seeds.txt -e google,bing,amazon,youtube -x alpha,questions -d 1 -o out.csv
  *   afkrt --list-engines
+ *   afkrt "kahve makinesi" --serp --serp-pages 10     (also walk Google result pages)
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
@@ -13,6 +14,7 @@ import { Miner } from '../web/js/miner.js';
 import { parseSeeds, parseList } from '../web/js/expand.js';
 import { serialize, FORMATS } from '../web/js/export.js';
 import { createHttpFetcher } from '../lib/http-fetcher.js';
+import { runSerpPhase, SERP_LIMITS } from '../web/js/serp-client.js';
 
 const HELP = `
 Advanced Free Keyword Research Tool (CLI)
@@ -53,6 +55,20 @@ Limits / politeness:
       --timeout <ms>        Request timeout (default 10000)
       --user-agent <ua>     Override the User-Agent header
 
+Google result pages (SERP) — optional, needs \`npm install\` + local Chrome/Chromium/Edge:
+      --serp                Also walk Google result pages (start=0,10,20…) for every seed and collect
+                            related searches + "People also ask" (+ organic titles if requested)
+      --serp-pages <n>      Pages per seed, 1–100 (default ${SERP_LIMITS.defaultPages}). Google often has fewer.
+      --serp-sources <list> related, paa, organic  (default related,paa)
+      --serp-delay <ms>     Pause between two page loads, min ${SERP_LIMITS.minDelayMs} (default ${SERP_LIMITS.defaultDelayMs})
+      --serp-backend <b>    browser (default, your installed Chrome) | html (plain HTTP; usually JS-walled)
+      --serp-headful        Show the browser window
+      --serp-chrome <path>  Browser executable (or set CHROME_PATH)
+      --serp-profile <dir>  Browser profile directory to reuse (keeps Google's cookie-consent choice)
+      --serp-only           Only SERP pages, skip autocomplete engines
+                            Stops immediately on CAPTCHA / unusual-traffic pages (no solving, no evasion).
+                            Automated SERP access is against Google's ToS — see README.
+
 Output:
   -o, --out <file>          Output file; format from extension (.txt .csv .tsv .json .md)
                             Can be repeated:  -o out.txt -o out.csv
@@ -85,6 +101,16 @@ function parseArgs(argv) {
       case '--max-results': a.maxResults = Number(v()); break;
       case '--timeout': a.timeout = Number(v()); break;
       case '--user-agent': a.userAgent = v(); break;
+      case '--serp': a.serp = true; break;
+      case '--serp-only': a.serp = true; a.serpOnly = true; break;
+      case '--serp-pages': a.serp = true; a.serpPages = Number(v()); break;
+      case '--serp-sources': a.serpSources = v(); break;
+      case '--serp-delay': a.serpDelay = Number(v()); break;
+      case '--serp-backend': a.serpBackend = v(); break;
+      case '--serp-headful': a.serpHeadful = true; break;
+      case '--serp-chrome': a.serpChrome = v(); break;
+      case '--serp-profile': a.serpProfile = v(); break;
+      case '--serp-base-url': a.serpBaseUrl = v(); break; // tests: fake Google
       case '-o': case '--out': a.outs.push(v()); break;
       case '--format': a.format = v(); break;
       case '-q': case '--quiet': a.quiet = true; break;
@@ -98,6 +124,18 @@ function parseArgs(argv) {
   const ints = { depth: [0, 10], delay: [0, 60000], concurrency: [1, 32], maxQueries: [1, 1e6], maxResults: [1, 1e7], timeout: [1000, 120000] };
   for (const [k, [min, max]] of Object.entries(ints)) {
     if (!Number.isInteger(a[k]) || a[k] < min || a[k] > max) throw new Error(`--${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} must be an integer between ${min} and ${max}`);
+  }
+  if (a.serp) {
+    a.serpPages ??= SERP_LIMITS.defaultPages;
+    a.serpDelay ??= SERP_LIMITS.defaultDelayMs;
+    a.serpBackend ??= 'browser';
+    if (!Number.isInteger(a.serpPages) || a.serpPages < SERP_LIMITS.minPages || a.serpPages > SERP_LIMITS.maxPages) throw new Error(`--serp-pages must be an integer between 1 and ${SERP_LIMITS.maxPages}`);
+    const minDelay = a.serpBaseUrl ? 0 : SERP_LIMITS.minDelayMs;
+    if (!Number.isInteger(a.serpDelay) || a.serpDelay < minDelay || a.serpDelay > 600000) throw new Error(`--serp-delay must be an integer between ${SERP_LIMITS.minDelayMs} and 600000`);
+    if (!['browser', 'html'].includes(a.serpBackend)) throw new Error('--serp-backend must be browser or html');
+    a.serpSourceList = parseList((a.serpSources || 'related,paa').toLowerCase());
+    for (const x of a.serpSourceList) if (!['related', 'paa', 'organic'].includes(x)) throw new Error(`Unknown --serp-sources entry "${x}" (use related, paa, organic)`);
+    if (!a.serpSourceList.length) throw new Error('--serp-sources is empty');
   }
   return a;
 }
@@ -154,13 +192,34 @@ async function main() {
   const seeds = parseSeeds(seedText);
   if (!seeds.length) { console.error('No seed keywords. Try: afkrt "seo tools"  (or --help)'); process.exitCode = 2; return; }
 
-  const engines = resolveEngines(a.engines);
+  const engines = a.serpOnly ? [] : resolveEngines(a.engines);
   const log = (...m) => { if (!a.quiet) process.stderr.write(`${m.join(' ')}\n`); };
   log(`▸ ${seeds.length} seed(s) · lang ${a.lang} · country ${a.country} · engines: ${engines.join(', ')} · depth ${a.depth}`);
+  if (a.serp) log(`  + Google SERP: ${a.serpPages} page(s)/seed · sources ${a.serpSourceList.join(',')} · ${a.serpDelay} ms between pages · ${a.serpBackend} backend`);
   const fixed = engines.filter((id) => localeSupport(ENGINES.find((e) => e.id === id)) === 'fixed');
   if (fixed.length) log(`  note: ${fixed.join(', ')} ignore language/country (single-market engines)`);
 
+  let serpBackend = null;
+  const alongside = [];
+  if (a.serp) {
+    const { createSerpBackend } = await import('../lib/google-serp.js');
+    serpBackend = createSerpBackend({ backend: a.serpBackend, headful: a.serpHeadful, chromePath: a.serpChrome, userDataDir: a.serpProfile, baseUrl: a.serpBaseUrl });
+    alongside.push((m) => runSerpPhase({
+      miner: m, seeds, fetchPage: serpBackend.fetchPage, pages: a.serpPages, sources: a.serpSourceList,
+      delayMs: a.serpDelay, minDelayMs: a.serpBaseUrl ? 0 : SERP_LIMITS.minDelayMs,
+      onStatus: (s) => {
+        if (s.type === 'blocked') {
+          const hint = { captcha: 'Google asked for a CAPTCHA (unusual traffic). Not solved by design — try later, fewer pages, a longer --serp-delay, or a normal home connection', jswall: 'Google requires JavaScript for this client — use --serp-backend browser', consent: 'Google showed a cookie-consent page — try --serp-headful once and accept it with a --serp-profile, or another country', unavailable: 'browser backend not available' }[s.status] || '';
+          log(`\n  ⚠ Google SERP stopped on page ${s.page} for "${s.seed}": ${s.status}${s.error && s.error !== s.status ? ` (${s.error})` : ''}${hint ? ` — ${hint}` : ''}.${engines.length ? ' Autocomplete engines continue.' : ''}`);
+        }
+        else if (s.type === 'error') log(`\n  ⚠ Google SERP page ${s.page} for "${s.seed}" failed: ${s.error}`);
+        else if (s.type === 'end') log(`\n  · Google SERP: "${s.seed}" has no more result pages after page ${s.page}`);
+      },
+    }));
+  }
+
   const miner = new Miner({
+    alongside,
     fetcher: createHttpFetcher(a.userAgent ? { userAgent: a.userAgent } : {}),
     engines, seeds, hl: a.lang, gl: a.country,
     expansion: resolveExpansion(a.expand, a), depth: a.depth, expandRecursive: a.expandRecursive,
@@ -178,13 +237,14 @@ async function main() {
   miner.on('engineDisabled', ({ engine, error }) => log(`\n  ⚠ ${engine} disabled after repeated errors (${error})`));
   process.on('SIGINT', () => { log('\n  ■ stopping… (partial results will be saved)'); miner.stop(); });
 
-  const results = await miner.run();
+  let results;
+  try { results = await miner.run(); } finally { await serpBackend?.close(); }
   results.sort((x, y) => y.engines.length - x.engines.length || y.hits - x.hits || x.keyword.localeCompare(y.keyword));
   if (!a.quiet && process.stderr.isTTY) process.stderr.write('\n');
   log(`✔ ${results.length} unique keywords from ${miner.stats.done} requests (${miner.stats.errors} errors)`);
   for (const [id, s] of Object.entries(miner.stats.perEngine)) log(`   ${id.padEnd(16)} req ${String(s.requests).padStart(5)}  new ${String(s.found).padStart(5)}  err ${s.errors}${s.disabled ? '  (disabled)' : ''}`);
 
-  const meta = { seeds, engines, lang: a.lang, country: a.country, depth: a.depth };
+  const meta = { seeds, engines, lang: a.lang, country: a.country, depth: a.depth, ...(a.serp ? { serp: { pages: a.serpPages, sources: a.serpSourceList } } : {}) };
   if (!a.outs.length) {
     if (!FORMATS.includes(a.format)) throw new Error(`Unknown format ${a.format}`);
     process.stdout.write(serialize(a.format, results, meta));

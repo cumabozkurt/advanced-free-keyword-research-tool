@@ -56,3 +56,18 @@ The CLI, local server and GitHub Action always use plain HTTP, so **every** engi
 | App Store | `search.itunes.apple.com/…/hints` | Empty plist |
 
 Bypassing bot protection (403 / DataDome / captchas) is intentionally **out of scope**.
+
+## Google result pages (SERP) — optional, not an autocomplete endpoint (2026-10-09)
+
+`https://www.google.com/search?q={q}&hl={hl}&gl={gl}&lr=lang_{hl}&pws=0&start={page*10}` — 10 results per page (`num=` no longer honoured).
+Parsed fields only (`lib/serp-parse.js`): related searches (`<a href="/search?q=X">` whose text is X, excluding tabs/pagination/spelling),
+People-also-ask (`data-q="…"`), organic titles (`<h3>`), next page (`#pnnext` / `start={next}`).
+
+| Client | Result from a datacenter IP |
+|---|---|
+| curl / Node `fetch`, any UA, incl. `gbv=1` | "enablejs" JavaScript wall (`/httpservice/retry/enablejs`), no results |
+| text-browser UA (Lynx) | "update your browser" page |
+| headless Chrome (puppeteer-core) | `/sorry/index` "unusual traffic" CAPTCHA, HTTP 429, already on page 1 |
+| Custom Search JSON API | closed to new customers, discontinued 2027-01-01 |
+
+The tool therefore offers a `browser` backend for home/office connections and stops on the first CAPTCHA / consent / JS wall.

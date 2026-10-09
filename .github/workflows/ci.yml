@@ -19,7 +19,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      - run: npm ci --no-audit --no-fund   # installs the optional puppeteer-core for the SERP browser-backend test
       - run: npm run lint
       - run: npm test
+        env:
+          AFKRT_CHROME_NO_SANDBOX: '1'
       - name: CLI smoke test (offline-safe)
         run: node bin/cli.js --list-engines

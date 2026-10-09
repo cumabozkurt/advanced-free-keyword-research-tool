@@ -101,3 +101,15 @@ Key lessons:
 - The proxy is **not an open proxy**: only engine ids from the registry are accepted, upstream URLs are built server-side, queries are length-limited, per-IP rate-limited and cached.
 - The CLI identifies itself with an honest User-Agent (`AdvancedFreeKeywordResearchTool/1.0 (+repo URL)`).
 - No captcha solving, fingerprint spoofing or bot-protection bypass — engines that block automated clients are documented as unsupported.
+
+## 5. Google result pages (added in 1.1.0)
+
+Requested feature: walk Google result pages (up to 100) and collect *related searches* and *People also ask* besides autocomplete.
+Findings that shaped the implementation (see also docs/ENDPOINTS.md):
+
+- Browser-side (GitHub Pages) access is impossible: no CORS on `/search`, and Google requires JavaScript since 2025.
+- Plain HTTP gets a JavaScript wall; only a real browser engine renders results → optional `puppeteer-core` driving the user's own Chrome.
+- From cloud/CI IPs Google answers with a CAPTCHA immediately. We deliberately do **not** add stealth plugins, CAPTCHA solvers or
+  proxy rotation (bot-detection evasion). The tool stops, reports the reason, and keeps the autocomplete engines running.
+- The official Custom Search JSON API is closed to new customers (shutdown 2027-01-01), so there is no sanctioned API alternative.
+- Google's ToS do not permit automated querying of result pages; the README states this risk plainly.

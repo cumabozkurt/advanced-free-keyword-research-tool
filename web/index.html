@@ -85,6 +85,26 @@
         <div id="engineList" class="engine-list"></div>
       </section>
 
+      <section class="card" id="serpCard" aria-labelledby="serpTitle">
+        <h2 class="h2" id="serpTitle" data-i18n="serpTitle"></h2>
+        <label class="check"><input id="serpEnabled" type="checkbox"><span data-i18n="serpEnable"></span></label>
+        <div class="grid2">
+          <label><span data-i18n="serpPages"></span>
+            <input id="serpPages" type="number" min="1" max="100" step="1" value="10">
+          </label>
+          <label><span data-i18n="serpDelay"></span>
+            <input id="serpDelay" type="number" min="2" max="600" step="1" value="5">
+          </label>
+        </div>
+        <div class="check-list" role="group" aria-labelledby="serpTitle">
+          <label class="check"><input id="serpRelated" type="checkbox" checked><span data-i18n="serpRelated"></span></label>
+          <label class="check"><input id="serpPaa" type="checkbox" checked><span data-i18n="serpPaa"></span></label>
+          <label class="check"><input id="serpOrganic" type="checkbox"><span data-i18n="serpOrganic"></span></label>
+        </div>
+        <p class="hint" data-i18n="serpHint"></p>
+        <p class="hint" id="serpStatus" role="status"></p>
+      </section>
+
       <section class="card">
         <h2 class="h2" data-i18n="expansion"></h2>
         <div id="expansionList" class="check-list"></div>

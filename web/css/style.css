@@ -137,3 +137,4 @@ tr:hover .kw-actions, .kw-actions:focus-within { opacity: 1; }
 
 .noscript { padding: 16px; }
 #localeInfo { min-height: 1em; }
+.hint.warn { color: var(--warn, #f0b35a); }

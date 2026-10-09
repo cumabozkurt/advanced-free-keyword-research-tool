@@ -306,3 +306,17 @@ export const browserNative = (e) => Boolean(e.jsonp || e.cors);
 export const DEFAULT_ENGINES = ['google', 'bing', 'yahoo', 'duckduckgo', 'youtube', 'google-shopping', 'ebay', 'wikipedia'];
 
 export const CATEGORIES = ['web', 'video', 'shopping', 'vertical', 'knowledge'];
+
+/**
+ * Non-autocomplete result sources (Google SERP pagination mining). They appear in the `engines`
+ * field of results/exports, so a keyword can be tagged e.g. ["google","serp-related"].
+ */
+export const SOURCE_LABELS = Object.assign(Object.create(null), {
+  'google-serp': 'Google SERP',
+  'serp-related': 'Google SERP · related',
+  'serp-paa': 'Google SERP · PAA',
+  'serp-organic': 'Google SERP · organic title',
+});
+
+/** Display name for an engine id or a SERP source id. */
+export const sourceName = (id) => ENGINE_MAP[id]?.name || SOURCE_LABELS[id] || String(id);

@@ -25,6 +25,7 @@ export const DEFAULT_OPTIONS = {
   retries: 1,
   maxConsecutiveErrors: 6, // disable an engine after this many failures in a row
   mustContainSeed: false, // keep only suggestions containing every seed word
+  alongside: [],          // extra async phases fn(miner) run in parallel (e.g. Google SERP pages)
 };
 
 const sleep = (ms, signal) => new Promise((resolve) => {
@@ -184,7 +185,12 @@ export class Miner {
       }
     };
 
-    await Promise.all(o.engines.map((id) => worker(id)));
+    // Extra phases (e.g. Google SERP pagination) run alongside the autocomplete workers and share
+    // the result set, stop/pause controls and stats. Their failure never stops autocomplete mining.
+    const extra = (o.alongside || []).map((fn) => Promise.resolve().then(() => fn(this)).catch((err) => {
+      this.emit('error', { engine: 'alongside', query: '', error: String(err?.message || err) });
+    }));
+    await Promise.all([...o.engines.map((id) => worker(id)), ...extra]);
     this.state = signal.aborted ? 'stopped' : 'done';
     this.emitProgress();
     this.emit('state', this.state);

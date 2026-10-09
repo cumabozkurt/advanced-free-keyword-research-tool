@@ -1,17 +1,46 @@
 {
   "name": "advanced-free-keyword-research-tool",
-  "version": "1.0.0",
-  "description": "Advanced Free Keyword Research Tool — bulk long-tail keyword ideas from 25+ search engine autocomplete endpoints (Google, Bing, YouTube, Amazon, DuckDuckGo, Yandex, Baidu…). Runs on GitHub Pages, CLI or local server. No API keys.",
+  "version": "1.1.0",
+  "description": "Advanced Free Keyword Research Tool — bulk long-tail keyword ideas from 25+ search engine autocomplete endpoints (Google, Bing, YouTube, Amazon, DuckDuckGo, Yandex, Baidu…) plus optional Google result-page (SERP) mining of related searches and People-also-ask. Runs on GitHub Pages, CLI or local server. No API keys.",
   "type": "module",
   "license": "MIT",
   "author": "Cuma Bozkurt (https://github.com/cumabozkurt)",
   "homepage": "https://cumabozkurt.github.io/advanced-free-keyword-research-tool/",
-  "repository": { "type": "git", "url": "git+https://github.com/cumabozkurt/advanced-free-keyword-research-tool.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cumabozkurt/advanced-free-keyword-research-tool.git"
+  },
   "bugs": "https://github.com/cumabozkurt/advanced-free-keyword-research-tool/issues",
-  "keywords": ["keyword-research", "seo", "autocomplete", "google-suggest", "keyword-tool", "long-tail-keywords", "keyword-shitter", "search-suggestions", "youtube-keywords", "amazon-keywords"],
-  "bin": { "afkrt": "bin/cli.js" },
-  "files": ["bin", "lib", "server", "web", "README.md", "README.tr.md", "LICENSE"],
-  "engines": { "node": ">=18" },
+  "keywords": [
+    "keyword-research",
+    "seo",
+    "autocomplete",
+    "google-suggest",
+    "keyword-tool",
+    "long-tail-keywords",
+    "keyword-shitter",
+    "search-suggestions",
+    "youtube-keywords",
+    "amazon-keywords",
+    "serp",
+    "people-also-ask",
+    "related-searches"
+  ],
+  "bin": {
+    "afkrt": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "server",
+    "web",
+    "README.md",
+    "README.tr.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server/server.js",
     "dev": "node server/server.js --port 8787",
@@ -19,5 +48,8 @@
     "test": "node --test test/*.test.js",
     "check": "node scripts/check-endpoints.js",
     "lint": "for f in bin/cli.js server/server.js lib/*.js web/js/*.js scripts/*.js proxy/*.js; do node --check \"$f\" || exit 1; done"
+  },
+  "optionalDependencies": {
+    "puppeteer-core": "^24.43.1"
   }
 }
