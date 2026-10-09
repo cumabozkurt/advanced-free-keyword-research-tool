@@ -143,7 +143,9 @@ export class Miner {
           } catch (err) {
             lastErr = err;
             if (signal.aborted) break;
-            await sleep(o.delayMs * (attempt + 2), signal);
+            // Rate limited -> back off much longer before retrying (be polite, avoid auto-disable storms)
+            const limited = /\b(429|503)\b|rate limit/i.test(String(err?.message || err));
+            await sleep(limited ? Math.max(5000, o.delayMs * 10) * (attempt + 1) : o.delayMs * (attempt + 2), signal);
           }
         }
         release();

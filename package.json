@@ -16,8 +16,8 @@
     "start": "node server/server.js",
     "dev": "node server/server.js --port 8787",
     "cli": "node bin/cli.js",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "check": "node scripts/check-endpoints.js",
-    "lint": "node --check bin/cli.js && node --check server/server.js"
+    "lint": "for f in bin/cli.js server/server.js lib/*.js web/js/*.js scripts/*.js proxy/*.js; do node --check \"$f\" || exit 1; done"
   }
 }

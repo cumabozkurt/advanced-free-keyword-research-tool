@@ -10,7 +10,7 @@
 import { createHttpFetcher } from '../lib/http-fetcher.js';
 import { createProxy } from '../lib/proxy-core.js';
 
-const proxy = createProxy({ fetcher: createHttpFetcher(), limits: { perIpPerMinute: 90 } });
+const proxy = createProxy({ fetcher: createHttpFetcher(), limits: { perIpPerMinute: 1200 } });
 
 export default {
   async fetch(request, env) {

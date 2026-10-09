@@ -20,22 +20,36 @@ const args = process.argv.slice(2);
 const arg = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : (process.env[name.toUpperCase()] ?? def); };
 const PORT = Number(arg('port', 8787));
 const HOST = arg('host', '127.0.0.1');
-const ALLOW_ORIGIN = arg('allow-origin', '*');
+// Which other web origins may call this proxy from a browser (comma separated, or "*").
+// Same-origin use (the app served by this server) always works. Default also allows the public GitHub Pages app.
+const ALLOWED_ORIGINS = String(arg('allow-origin', 'https://cumabozkurt.github.io')).split(',').map((x) => x.trim()).filter(Boolean);
 const ROOT = resolve(fileURLToPath(new URL('../web/', import.meta.url)));
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain; charset=utf-8' };
 
-const proxy = createProxy({ fetcher: createHttpFetcher({ userAgent: arg('user-agent', undefined) }) });
+const proxy = createProxy({ fetcher: createHttpFetcher({ userAgent: arg('user-agent', undefined) }), limits: { exemptLoopback: true } });
+
+function corsHeaders(req) {
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.includes('*')) return { 'Access-Control-Allow-Origin': '*' };
+  if (origin && ALLOWED_ORIGINS.includes(origin)) return { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' };
+  return { Vary: 'Origin' };
+}
+
+const SECURITY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY' };
 
 const send = (res, status, body, headers = {}) => {
-  res.writeHead(status, { 'Access-Control-Allow-Origin': ALLOW_ORIGIN, 'X-Content-Type-Options': 'nosniff', ...headers });
+  res.writeHead(status, { ...SECURITY_HEADERS, ...corsHeaders(res.req), ...headers });
   res.end(body);
 };
 
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (req.method === 'OPTIONS') return send(res, 204, '', { 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Max-Age': '86400' });
+    const url = new URL(req.url, 'http://localhost');
+    if (req.method === 'OPTIONS') {
+      const pna = req.headers['access-control-request-private-network'] ? { 'Access-Control-Allow-Private-Network': 'true' } : {};
+      return send(res, 204, '', { 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Max-Age': '86400', ...pna });
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
 
     if (url.pathname === '/api/health') {
@@ -48,7 +62,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     // static files
-    let p = decodeURIComponent(url.pathname);
+    let p;
+    try { p = decodeURIComponent(url.pathname); } catch { return send(res, 400, 'Bad request'); }
+    if (p.includes('\0')) return send(res, 400, 'Bad request');
     if (p.endsWith('/')) p += 'index.html';
     const file = normalize(join(ROOT, p));
     if (!file.startsWith(ROOT + sep) && file !== ROOT) return send(res, 403, 'Forbidden');
@@ -64,5 +80,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   const shown = HOST === '0.0.0.0' ? 'localhost' : HOST;
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') console.warn('  ⚠ Listening on a non-loopback address: anyone who can reach this port can use the proxy (rate-limited).');
   console.log(`\n  Advanced Free Keyword Research Tool\n  ▸ App:   http://${shown}:${PORT}/\n  ▸ Proxy: http://${shown}:${PORT}/api/suggest?engine=amazon&q=laptop\n\n  The web app auto-detects this proxy, so all ${ENGINES.length} engines are available.\n`);
 });

@@ -1,7 +1,7 @@
 /**
  * Browser fetcher: JSONP → CORS → optional proxy (local server or Cloudflare Worker).
  */
-import { ENGINE_MAP, parseJsonish } from './engines.js';
+import { ENGINE_MAP, isEngineId, parseJsonish } from './engines.js';
 
 let counter = 0;
 const fixedLocks = new Map();
@@ -15,7 +15,7 @@ function jsonpFixed(url, param, name, opts) {
 }
 
 /** Minimal, cleanup-safe JSONP. Only used for the fixed allow-listed engine hosts in engines.js. */
-export function jsonp(url, param, { timeoutMs = 10000, signal, callbackName } = {}) {
+export function jsonp(url, param, { timeoutMs = 10000, signal, callbackName, emptyOnInvalid = false } = {}) {
   return new Promise((resolve, reject) => {
     const cb = callbackName || `__afkrt_${Date.now().toString(36)}_${(counter++).toString(36)}`;
     const script = document.createElement('script');
@@ -32,6 +32,13 @@ export function jsonp(url, param, { timeoutMs = 10000, signal, callbackName } = 
     const timer = setTimeout(() => { if (!done) { cleanup(); reject(new Error('timeout')); } }, timeoutMs);
     window[cb] = (data) => { if (!done) { cleanup(); resolve(data); } };
     script.onerror = () => { if (!done) { cleanup(); reject(new Error('network/blocked')); } };
+    // onload fires after the script ran; if the callback was not called the body was not valid JSONP
+    // (e.g. Baidu answers `cb({q:"",p:,s:[]})` for some inputs) -> fail fast instead of waiting for the timeout.
+    script.onload = () => {
+      if (done) return;
+      cleanup();
+      if (emptyOnInvalid) resolve(null); else reject(new Error('invalid JSONP response'));
+    };
     script.src = `${url}${url.includes('?') ? '&' : '?'}${param}=${cb}`;
     script.referrerPolicy = 'no-referrer';
     script.async = true;
@@ -66,13 +73,13 @@ export function browserMode(engine, proxyUrl) {
 export function createBrowserFetcher({ proxyUrl = '', preferProxy = false } = {}) {
   const proxy = proxyUrl.replace(/\/+$/, '');
   return async function fetcher(engineId, query, opts) {
+    if (!isEngineId(engineId)) throw new Error(`unknown engine ${engineId}`);
     const e = ENGINE_MAP[engineId];
-    if (!e) throw new Error(`unknown engine ${engineId}`);
     const mode = preferProxy && proxy ? 'proxy' : browserMode(e, proxy);
     if (mode === 'jsonp') {
       const data = e.jsonp.fixedCallback
         ? await jsonpFixed(e.jsonp.url(query, opts), e.jsonp.param, e.jsonp.fixedCallback, opts)
-        : await jsonp(e.jsonp.url(query, opts), e.jsonp.param, opts);
+        : await jsonp(e.jsonp.url(query, opts), e.jsonp.param, { ...opts, emptyOnInvalid: e.jsonp.emptyOnInvalid });
       return e.jsonp.parse(data);
     }
     if (mode === 'cors') return e.cors.parse(await fetchJson(e.cors.url(query, opts), opts));

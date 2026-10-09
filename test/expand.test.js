@@ -27,3 +27,16 @@ test('questions, modifiers and custom lists', () => {
   assert.ok(q.includes('kahve 2026'));
   assert.equal(new Set(q).size, q.length);
 });
+
+import { normalizeKeyword, isQuestion } from '../web/js/normalize.js';
+
+test('normalisation folds Turkish dotted capital I and whitespace', () => {
+  assert.equal(normalizeKeyword('  İstanbul   Hava '), normalizeKeyword('istanbul hava'));
+});
+
+test('question detection (TR + EN)', () => {
+  assert.ok(isQuestion('kahve nasıl yapılır'));
+  assert.ok(isQuestion('nasıl kahve yapılır'));
+  assert.ok(isQuestion('how to make coffee'));
+  assert.ok(!isQuestion('kahve makinesi'));
+});
