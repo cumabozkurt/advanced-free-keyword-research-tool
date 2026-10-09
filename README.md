@@ -8,7 +8,7 @@
 
 Google · Bing · YouTube · Yahoo · DuckDuckGo · Yandex · Baidu · Naver · Amazon · eBay · Walmart · TikTok · Wikipedia · Ecosia · Qwant · Brave · Seznam · 360 · Sogou · Quark · Swisscows · Google Images / News / Shopping / Scholar
 
-[**▶ Open the web app**](https://cumabozkurt.github.io/advanced-free-keyword-research-tool/) · [Türkçe](README.tr.md) · [Research](RESEARCH.md) · [Endpoints](docs/ENDPOINTS.md)
+[**▶ Open the web app**](https://cumabozkurt.github.io/advanced-free-keyword-research-tool/) · [Türkçe](README.tr.md) · [Research](RESEARCH.md) · [Endpoints](docs/ENDPOINTS.md) · [Audit](docs/AUDIT.md)
 
 ![Screenshot](docs/screenshots/app-en-desktop.png)
 
@@ -24,7 +24,7 @@ Google · Bing · YouTube · Yahoo · DuckDuckGo · Yandex · Baidu · Naver · 
 - **Filter & sort** — search, exclude words, min. words, questions only
 - **Exports** — TXT, CSV (UTF-8 BOM for Excel, formula-injection safe), TSV, JSON, Markdown, copy to clipboard
 - **Polite by design** — per-engine delay, concurrency limit, max requests, pause / resume / stop, auto-disable failing engines
-- **Language & country** targeting (`hl` / `gl`), 14 Amazon marketplaces, eBay sites
+- **Search language & country** (default 🇹🇷 `tr` / `tr`) wired into every engine that supports it — see [Language & country](#language--country)
 - **Turkish & English UI**, dark theme, keyboard accessible, mobile friendly, settings saved locally
 - **Zero dependencies, no build step** — plain ES modules shared by browser and Node
 
@@ -51,9 +51,10 @@ The app detects the built-in proxy automatically and unlocks every engine.
 ### 3. Command line
 
 ```bash
-node bin/cli.js "seo tools"                                   # Google, Bing, Yahoo, DDG, YouTube… → stdout
-node bin/cli.js -f seeds.txt -e all -x alpha,questions -d 1 -o out.csv -o out.txt
-node bin/cli.js "kahve makinesi" -l tr -c tr -e google,yandex,amazon,youtube -o kahve.json
+node bin/cli.js "kahve makinesi"                              # defaults: Turkish / Türkiye → stdout
+node bin/cli.js "seo tools" -l en -c us                       # English / United States
+node bin/cli.js -f seeds.txt -e all -x alpha,questions -d 1 -l de -c de -o out.csv -o out.txt
+node bin/cli.js "kahve makinesi" -e google,yandex,amazon,youtube -o kahve.json   # amazon.com.tr
 cat seeds.txt | node bin/cli.js -e web -x none --format tsv > out.tsv
 node bin/cli.js --list-engines
 node bin/cli.js --help
@@ -73,6 +74,34 @@ cd proxy && npx wrangler deploy      # Cloudflare Workers free tier
 ```
 
 Paste the worker URL into **Options → Proxy URL** in the app. Set `ALLOWED_ORIGINS` in `proxy/wrangler.toml` to your Pages origin.
+
+You can also point the Pages app at your **local** server (`http://localhost:8787`). By default the local server only accepts
+cross-origin calls from `https://cumabozkurt.github.io`; for a fork use `npm start -- --allow-origin https://<you>.github.io`.
+
+## Language & country
+
+Suggestions differ a lot per market, so every search has a **search language** (`hl`) and **country/region** (`gl`),
+independent of the interface language. Default: **Turkish / Türkiye** (`tr` / `tr`).
+
+- **Web app:** *Search language & country* card with ~38 languages, ~60 countries and quick presets (TR, US, UK, DE, FR, AZ, SA). A live line shows which selected engines use the locale and where they point (e.g. `Amazon → amazon.com.tr`). Shareable via `?hl=tr&gl=tr`.
+- **CLI:** `-l/--lang <hl>` and `-c/--country <gl>` (validated ISO codes). `--list-engines` shows each engine's locale support.
+- **GitHub Action:** `lang` / `country` inputs (default `tr` / `tr`).
+- The expansion alphabet and question words follow the search language (Turkish `ç ğ ı ö ş ü`, Azerbaijani `ə`, Polish, Ukrainian, Russian, German, Spanish…).
+
+| Engine | What `hl` / `gl` control |
+|---|---|
+| Google, YouTube, Images, News, Shopping | `hl` + `gl` |
+| Google Scholar | `hl` |
+| Bing | market `mkt={hl}-{GL}` |
+| DuckDuckGo | region `kl={gl}-{hl}` (gb → `uk`) |
+| Yahoo | regional host for 19 countries (uk, de, fr, es, it, ca, au, in, br, mx, nl, ar, tw, hk, sg, ph, id, vn, th); others (incl. TR, which returns nothing) → US |
+| Yandex | `uil={hl}` + region `lr` (tr, ru, ua, by, kz, uz, az, us, de, gb, fr) |
+| Ecosia | `mkt={hl}-{gl}` · Qwant `locale={hl}_{GL}` · Swisscows `locale={hl}-{GL}` · Brave `country` |
+| TikTok | `region={GL}&language={hl}` |
+| Amazon | marketplace by country: us, gb, de, fr, it, es, **tr**, jp, ca, in, br, mx, au, nl (others → amazon.com) |
+| eBay | site by country: us, ca, gb, au, at, fr, de, it, nl, es, ch, ie, pl (others → ebay.com) |
+| Wikipedia | `{hl}.wikipedia.org` |
+| Baidu, 360, Sogou, Quark (CN) · Naver (KR) · Seznam (CZ) · Walmart (US) | single market — locale ignored |
 
 ## Engines
 
@@ -108,12 +137,21 @@ The same `engines.js` and `miner.js` run in the browser, the CLI, the server and
 ## Development
 
 ```bash
-npm test        # unit tests (node:test, no deps)
+npm test        # 33 tests (node:test, no deps): parsers, locale wiring, miner, exports, proxy, CLI, server
 npm run check   # live endpoint check
 npm start       # local server
 ```
 
 Adding an engine = one object in `web/js/engines.js` (+ a parser test). See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security notes
+
+- The web app uses a strict **Content-Security-Policy**: scripts only from the app itself and the fixed JSONP engine hosts; no inline scripts.
+  JSONP still means those hosts' responses run as script on the page, which is why the page stores nothing sensitive (only your settings in `localStorage`).
+- All engine output is rendered with `textContent` (no HTML injection). CSV exports are protected against spreadsheet formula injection.
+- The proxy (local server / Worker) is **not an open proxy**: engine ids are allow-listed, upstream URLs are built server-side,
+  `hl`/`gl` are validated, queries are length-limited, responses are size-limited (2 MB), per-IP rate limited and cached.
+- The local server binds to `127.0.0.1` by default and only allows CORS from the configured origins (`--allow-origin`).
 
 ## Responsible use
 
