@@ -1,0 +1,7 @@
+name = "afkrt-proxy"
+main = "cloudflare-worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Comma separated. Use your GitHub Pages origin, e.g. "https://cumabozkurt.github.io"
+ALLOWED_ORIGINS = "*"
